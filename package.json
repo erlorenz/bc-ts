@@ -45,11 +45,11 @@
 		"node": ">=24.0.0"
 	},
 	"devDependencies": {
+		"@azure/identity": "^4.11.1",
 		"@biomejs/biome": "^2.1.4",
 		"@types/node": "^24.2.1",
 		"tsx": "^4.20.3",
 		"typescript": "^5.9.2",
-		"@azure/identity": "^4.11.1"
-	},
-	"dependencies": {}
+		"zod": "^4.0.17"
+	}
 }

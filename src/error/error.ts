@@ -1,4 +1,9 @@
-import { categorizeError } from "./categorize.js";
+import {
+	BCErrorCategory,
+	BCErrorSubcategory,
+	BCRetryStrategy,
+	categorizeError,
+} from "./categorize.js";
 
 /**
  * Business Central OData Error Response Structure
@@ -41,90 +46,6 @@ function validateErrorResponse(data: unknown): ErrorResponse {
 		},
 	};
 }
-
-/**
- * Business Central API Error Categories
- */
-export const BCErrorCategory = {
-	CLIENT_ERROR: "CLIENT_ERROR",
-	NOT_FOUND: "NOT_FOUND",
-	CONFLICT: "CONFLICT",
-	VALIDATION: "VALIDATION",
-	AUTHORIZATION: "AUTHORIZATION",
-	AUTHENTICATION: "AUTHENTICATION",
-	SERVER_ERROR: "SERVER_ERROR",
-	BUSINESS_LOGIC: "BUSINESS_LOGIC",
-	PARSING_ERROR: "PARSING_ERROR",
-	UNKNOWN: "UNKNOWN",
-} as const;
-
-export type BCErrorCategory =
-	(typeof BCErrorCategory)[keyof typeof BCErrorCategory];
-
-/**
- * Business Central API Error Subcategories
- */
-export const BCErrorSubcategory = {
-	// Token error
-	TOKEN_ERROR: "TOKEN_ERROR",
-	// Client errors
-	MALFORMED_REQUEST: "MALFORMED_REQUEST",
-	INVALID_URL: "INVALID_URL",
-	SYNTAX_ERROR: "SYNTAX_ERROR",
-	INVALID_TOKEN: "INVALID_TOKEN",
-	MISSING_REQUIRED_FIELD: "MISSING_REQUIRED_FIELD",
-	METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
-	METHOD_NOT_IMPLEMENTED: "METHOD_NOT_IMPLEMENTED",
-
-	// Not found variants
-	RESOURCE_NOT_FOUND: "RESOURCE_NOT_FOUND",
-	RECORD_NOT_FOUND: "RECORD_NOT_FOUND",
-	COMPANY_NOT_FOUND: "COMPANY_NOT_FOUND",
-
-	// Conflict variants
-	DUPLICATE_KEY: "DUPLICATE_KEY",
-	ENTITY_CHANGED: "ENTITY_CHANGED",
-
-	// Validation variants
-	FIELD_VALIDATION: "FIELD_VALIDATION",
-	STRING_LENGTH_EXCEEDED: "STRING_LENGTH_EXCEEDED",
-	INVALID_GUID: "INVALID_GUID",
-	INVALID_DATETIME: "INVALID_DATETIME",
-	FILTER_ERROR: "FILTER_ERROR",
-	ODATA_TYPE_ERROR: "ODATA_TYPE_ERROR",
-	ODATA_PROPERTY_NOT_FOUND: "ODATA_PROPERTY_NOT_FOUND",
-	INVALID_TABLE_RELATION: "INVALID_TABLE_RELATION",
-
-	// Server errors
-	DATA_ACCESS_ERROR: "DATA_ACCESS_ERROR",
-	DATABASE_CONNECTION: "DATABASE_CONNECTION",
-	TENANT_UNAVAILABLE: "TENANT_UNAVAILABLE",
-
-	// Business logic
-	DIALOG_EXCEPTION: "DIALOG_EXCEPTION",
-	CALLBACK_NOT_ALLOWED: "CALLBACK_NOT_ALLOWED",
-	EVALUATE_EXCEPTION: "EVALUATE_EXCEPTION",
-
-	// Parsing errors
-	SCHEMA_VALIDATION: "SCHEMA_VALIDATION",
-	UNEXPECTED_RESPONSE_FORMAT: "UNEXPECTED_RESPONSE_FORMAT",
-} as const;
-
-export type BCErrorSubcategory =
-	(typeof BCErrorSubcategory)[keyof typeof BCErrorSubcategory];
-
-/**
- * Retry strategy recommendations based on error type
- */
-export const BCRetryStrategy = {
-	NO_RETRY: "NO_RETRY",
-	IMMEDIATE_RETRY: "IMMEDIATE_RETRY",
-	EXPONENTIAL_BACKOFF: "EXPONENTIAL_BACKOFF",
-	REFRESH_TOKEN: "REFRESH_TOKEN",
-} as const;
-
-export type BCRetryStrategy =
-	(typeof BCRetryStrategy)[keyof typeof BCRetryStrategy];
 
 /**
  * Comprehensive Business Central API Error Class
@@ -247,6 +168,109 @@ export class BCError extends Error {
 	}
 
 	/**
+	 * Factory method to create BCError from network/fetch errors
+	 */
+	static fromNetworkError(networkError: Error): BCError {
+		// Type assertion to access Node.js error properties
+		const nodeError = networkError as Error & {
+			code?: string;
+			errno?: string | number;
+			syscall?: string;
+		};
+
+		// Determine retry strategy based on Node.js error codes
+		let retryStrategy: BCRetryStrategy = BCRetryStrategy.EXPONENTIAL_BACKOFF;
+		let subcategory: BCErrorSubcategory = BCErrorSubcategory.MALFORMED_REQUEST;
+
+		switch (nodeError.code) {
+			case "EAI_NONAME":
+				// DNS resolution failed - might be temporary
+				subcategory = BCErrorSubcategory.INVALID_URL;
+				retryStrategy = BCRetryStrategy.EXPONENTIAL_BACKOFF;
+				break;
+
+			case "ECONNREFUSED":
+				// Connection refused - server might be down
+				retryStrategy = BCRetryStrategy.EXPONENTIAL_BACKOFF;
+				break;
+
+			case "ETIMEDOUT":
+			case "ESOCKETTIMEDOUT":
+				// Timeout - worth retrying
+				retryStrategy = BCRetryStrategy.EXPONENTIAL_BACKOFF;
+				break;
+
+			case "ECONNRESET":
+			case "EPIPE":
+				// Connection reset - might be temporary
+				retryStrategy = BCRetryStrategy.EXPONENTIAL_BACKOFF;
+				break;
+
+			case "ENOTFOUND":
+				// Host not found - might be a config issue
+				subcategory = BCErrorSubcategory.INVALID_URL;
+				retryStrategy = BCRetryStrategy.NO_RETRY;
+				break;
+
+			case "CERT_HAS_EXPIRED":
+			case "UNABLE_TO_VERIFY_LEAF_SIGNATURE":
+			case "SELF_SIGNED_CERT_IN_CHAIN":
+				// Certificate errors - don't retry
+				retryStrategy = BCRetryStrategy.NO_RETRY;
+				break;
+
+			default:
+				// Unknown network error - try with backoff
+				retryStrategy = BCRetryStrategy.EXPONENTIAL_BACKOFF;
+		}
+
+		const errorMessage = nodeError.code
+			? `Network error (${nodeError.code}): ${networkError.message}`
+			: `Network error: ${networkError.message}`;
+
+		const errorResponse: ErrorResponse = {
+			error: {
+				code: "Client_NetworkError",
+				message: errorMessage,
+			},
+		};
+
+		const bcError = new BCError(errorResponse, 0);
+
+		// Override categorization for network errors
+		bcError.category = BCErrorCategory.NETWORK_ERROR;
+		bcError.subcategory = subcategory;
+		bcError.retryStrategy = retryStrategy;
+
+		return bcError;
+	}
+
+	/**
+	 * Factory method to create BCError from JSON parsing errors
+	 */
+	static fromJsonError(
+		jsonError: Error,
+		httpStatus: number,
+		correlationId: string,
+	): BCError {
+		const errorResponse: ErrorResponse = {
+			error: {
+				code: "Client_JSONParsingError",
+				message: `Failed to parse JSON response: ${jsonError.message}`,
+			},
+		};
+
+		const bcError = new BCError(errorResponse, httpStatus, correlationId);
+
+		// Override categorization for JSON parsing errors
+		bcError.category = BCErrorCategory.PARSING_ERROR;
+		bcError.subcategory = BCErrorSubcategory.UNEXPECTED_RESPONSE_FORMAT;
+		bcError.retryStrategy = BCRetryStrategy.NO_RETRY;
+
+		return bcError;
+	}
+
+	/**
 	 * Factory method to create BCError from schema validation issues
 	 * This is the only method for handling schema validation errors
 	 */
@@ -279,31 +303,21 @@ export class BCError extends Error {
 	/**
 	 * Factory method to create BCError from HTTP error response
 	 */
-	static fromHttpResponse(response: {
-		status: number;
-		data: unknown;
-		headers?: Record<string, string>;
-	}): BCError {
-		// Extract correlation ID from headers (case-insensitive)
-		const correlationId =
-			response.headers?.["request-id"] ||
-			response.headers?.["Request-Id"] ||
-			response.headers?.["REQUEST-ID"];
-
+	static fromHttpResponse(
+		status: number,
+		data: unknown,
+		correlationId: string,
+	): BCError {
 		// Validate and parse BC error response
 		let errorResponse: ErrorResponse;
 		try {
-			errorResponse = validateErrorResponse(response.data);
+			errorResponse = validateErrorResponse(data);
 		} catch {
 			// BC returned unexpected format - use fromUnexpectedResponse
-			return BCError.fromUnexpectedResponse(
-				response.data,
-				response.status,
-				correlationId,
-			);
+			return BCError.fromUnexpectedResponse(data, status, correlationId);
 		}
 
-		return new BCError(errorResponse, response.status, correlationId);
+		return new BCError(errorResponse, status, correlationId);
 	}
 
 	/**

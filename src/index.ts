@@ -1,7 +1,11 @@
-export { AzureIdentityClient } from "./client/auth.js";
 export {
 	type AuthClient,
-	type BCAuthConfig,
 	BCClient,
 	type BCConfig,
 } from "./client/client.js";
+export {
+	BCErrorCategory,
+	BCErrorSubcategory,
+	BCRetryStrategy,
+} from "./error/categorize.js";
+export { BCError } from "./error/error.js";
