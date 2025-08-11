@@ -1,5 +1,4 @@
 import packageJson from "../../package.json" with { type: "json" };
-import { AzureIdentityClient, type AzureIdentityConfig } from "./auth.js";
 
 /*=============================== Constants ===================================*/
 export const BC_BASE_URL = "https://api.businesscentral.dynamics.com/v2.0";
@@ -10,10 +9,6 @@ const GUID_REGEX =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /*=============================== Types ===================================*/
-export type BCAuthConfig = Pick<
-	AzureIdentityConfig,
-	"clientId" | "clientSecret"
->;
 
 export type BCConfig = {
 	tenantId: string;
@@ -24,9 +19,9 @@ export type BCConfig = {
 	userAgent?: string;
 };
 
-/** Gets an Entra ID access token.  */
+/** Satisfies the \@azure/identity TokenCredential. Can also use MSAL-node.  */
 export interface AuthClient {
-	getToken(): Promise<string>;
+	getToken(scope: string): Promise<string>;
 }
 
 /*=============================== Main Client ===================================*/
@@ -47,21 +42,6 @@ export class BCClient {
 		this.auth = authClient;
 		this.timeout = timeout;
 		this.userAgent = userAgent;
-	}
-
-	/** Create a BCClient using built-in \@azure/identity.  */
-	static withAuth(
-		config: BCConfig,
-		apiPath: string,
-		authConfig: BCAuthConfig,
-	): BCClient {
-		authConfig = validateAuthConfig(authConfig);
-		const authClient = new AzureIdentityClient({
-			...authConfig,
-			tenantId: config.tenantId,
-			scope: BC_DEFAULT_SCOPE,
-		});
-		return new BCClient(config, apiPath, authClient);
 	}
 }
 
@@ -89,17 +69,6 @@ function validateConfig(config: BCConfig): Required<BCConfig> {
 		baseURL: config.baseURL || BC_BASE_URL,
 		userAgent: config.userAgent || getDefaultUserAgent(),
 	};
-}
-
-function validateAuthConfig(config: BCAuthConfig): BCAuthConfig {
-	if (!GUID_REGEX.test(config.clientId)) {
-		throw Error("BCClient: a valid clientId is required.");
-	}
-	if (config.clientSecret === "") {
-		throw Error("BCClient: a valid clientSecret is required.");
-	}
-
-	return config;
 }
 
 /**

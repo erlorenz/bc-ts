@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { suite, test } from "node:test";
 import {
 	BC_BASE_URL,
-	type BCAuthConfig,
 	BCClient,
 	type BCConfig,
 	DEFAULT_TIMEOUT,
@@ -16,17 +15,12 @@ const fakeAuth = {
 };
 
 const validConfig = {
-	baseURL: "http://example.com",
+	baseURL: "http://example.com/v2.0",
 	companyId: randomUUID(),
 	tenantId: randomUUID(),
 	environment: "SANDBOX",
 	timeout: 5_000,
 } satisfies BCConfig;
-
-const validAuthConfig: BCAuthConfig = {
-	clientId: randomUUID(),
-	clientSecret: "secret",
-};
 
 /*=============================== Suites ===================================*/
 
@@ -64,19 +58,5 @@ suite("Initialize BCClient", { concurrency: true }, () => {
 		assert.ok(client.baseURL.startsWith(BC_BASE_URL));
 		assert.equal(client.timeout, DEFAULT_TIMEOUT);
 		assert.ok(client.userAgent && client.userAgent !== "");
-	});
-
-	test("withAuth factory - valid auth config", () => {
-		assert.doesNotThrow(() =>
-			BCClient.withAuth(validConfig, "apiPath", validAuthConfig),
-		);
-	});
-
-	test("withAuth factory - invalid auth config", () => {
-		const invalidConfig = { ...validAuthConfig, clientId: "not uuid" };
-
-		assert.throws(() =>
-			BCClient.withAuth(validConfig, "apiPath", invalidConfig),
-		);
 	});
 });
