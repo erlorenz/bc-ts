@@ -1,3 +1,5 @@
+import { categorizeError } from "./categorize.js";
+
 /**
  * Business Central OData Error Response Structure
  */
@@ -143,6 +145,7 @@ export class BCError extends Error {
 	timestamp: Date;
 	correlationId?: string;
 	validationDetails?: Array<{ message: string; path: string }>;
+	originalResponse?: unknown;
 
 	constructor(
 		errorResponse: ErrorResponse,
@@ -161,7 +164,7 @@ export class BCError extends Error {
 		if (correlationId) this.correlationId = correlationId;
 
 		// Categorize the error based on the BC error code pattern
-		const categorization = this.#categorizeError(errorResponse.error.code);
+		const categorization = categorizeError(errorResponse.error.code);
 		this.category = categorization.category;
 		this.subcategory = categorization.subcategory;
 		this.retryStrategy = categorization.retryStrategy;
@@ -170,231 +173,6 @@ export class BCError extends Error {
 		if (Error.captureStackTrace) {
 			Error.captureStackTrace(this, BCError);
 		}
-	}
-
-	/**
-	 * Categorizes Business Central error codes into domain-friendly categories
-	 */
-	#categorizeError(code: string): {
-		category: BCErrorCategory;
-		subcategory: BCErrorSubcategory;
-		retryStrategy: BCRetryStrategy;
-	} {
-		// BadRequest_* errors
-		if (code.startsWith("BadRequest_")) {
-			if (code === "BadRequest_ResourceNotFound") {
-				return {
-					category: BCErrorCategory.NOT_FOUND,
-					subcategory: BCErrorSubcategory.RESOURCE_NOT_FOUND,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "BadRequest_NotFound") {
-				return {
-					category: BCErrorCategory.CLIENT_ERROR,
-					subcategory: BCErrorSubcategory.INVALID_URL,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "BadRequest_InvalidRequestUrl") {
-				return {
-					category: BCErrorCategory.CLIENT_ERROR,
-					subcategory: BCErrorSubcategory.INVALID_URL,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "BadRequest_InvalidToken") {
-				return {
-					category: BCErrorCategory.CLIENT_ERROR,
-					subcategory: BCErrorSubcategory.INVALID_TOKEN,
-					retryStrategy: BCRetryStrategy.REFRESH_TOKEN,
-				};
-			}
-			if (code === "BadRequest_InvalidOperation") {
-				return {
-					category: BCErrorCategory.VALIDATION,
-					subcategory: BCErrorSubcategory.FIELD_VALIDATION,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "BadRequest_RequiredParamNotProvided") {
-				return {
-					category: BCErrorCategory.VALIDATION,
-					subcategory: BCErrorSubcategory.MISSING_REQUIRED_FIELD,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "BadRequest_MethodNotAllowed") {
-				return {
-					category: BCErrorCategory.CLIENT_ERROR,
-					subcategory: BCErrorSubcategory.METHOD_NOT_ALLOWED,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "BadRequest_MethodNotImplemented") {
-				return {
-					category: BCErrorCategory.CLIENT_ERROR,
-					subcategory: BCErrorSubcategory.METHOD_NOT_IMPLEMENTED,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			// Generic BadRequest
-			return {
-				category: BCErrorCategory.CLIENT_ERROR,
-				subcategory: BCErrorSubcategory.MALFORMED_REQUEST,
-				retryStrategy: BCRetryStrategy.NO_RETRY,
-			};
-		}
-
-		// Request_* errors (conflicts)
-		if (code.startsWith("Request_")) {
-			if (code === "Request_EntityChanged") {
-				return {
-					category: BCErrorCategory.CONFLICT,
-					subcategory: BCErrorSubcategory.ENTITY_CHANGED,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-		}
-
-		// Internal_* errors (server-side issues)
-		if (code.startsWith("Internal_")) {
-			if (code === "Internal_EntityWithSameKeyExists") {
-				return {
-					category: BCErrorCategory.CONFLICT,
-					subcategory: BCErrorSubcategory.DUPLICATE_KEY,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "Internal_RecordNotFound") {
-				return {
-					category: BCErrorCategory.NOT_FOUND,
-					subcategory: BCErrorSubcategory.RECORD_NOT_FOUND,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "Internal_CompanyNotFound") {
-				return {
-					category: BCErrorCategory.NOT_FOUND,
-					subcategory: BCErrorSubcategory.COMPANY_NOT_FOUND,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "Internal_DataNotFoundFilter") {
-				return {
-					category: BCErrorCategory.NOT_FOUND,
-					subcategory: BCErrorSubcategory.RECORD_NOT_FOUND,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "Internal_InvalidTableRelation") {
-				return {
-					category: BCErrorCategory.VALIDATION,
-					subcategory: BCErrorSubcategory.INVALID_TABLE_RELATION,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "Internal_ServerError") {
-				return {
-					category: BCErrorCategory.SERVER_ERROR,
-					subcategory: BCErrorSubcategory.DATABASE_CONNECTION,
-					retryStrategy: BCRetryStrategy.EXPONENTIAL_BACKOFF,
-				};
-			}
-			if (code === "Internal_TenantUnavailable") {
-				return {
-					category: BCErrorCategory.SERVER_ERROR,
-					subcategory: BCErrorSubcategory.TENANT_UNAVAILABLE,
-					retryStrategy: BCRetryStrategy.EXPONENTIAL_BACKOFF,
-				};
-			}
-		}
-
-		// Application_* errors (business logic)
-		if (code.startsWith("Application_")) {
-			if (code === "Application_DialogException") {
-				return {
-					category: BCErrorCategory.BUSINESS_LOGIC,
-					subcategory: BCErrorSubcategory.DIALOG_EXCEPTION,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "Application_FieldValidationException") {
-				return {
-					category: BCErrorCategory.VALIDATION,
-					subcategory: BCErrorSubcategory.FIELD_VALIDATION,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "Application_StringExceededLength") {
-				return {
-					category: BCErrorCategory.VALIDATION,
-					subcategory: BCErrorSubcategory.STRING_LENGTH_EXCEEDED,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "Application_InvalidGUID") {
-				return {
-					category: BCErrorCategory.VALIDATION,
-					subcategory: BCErrorSubcategory.INVALID_GUID,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "Application_FilterErrorException") {
-				return {
-					category: BCErrorCategory.VALIDATION,
-					subcategory: BCErrorSubcategory.FILTER_ERROR,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "Application_EvaluateException") {
-				return {
-					category: BCErrorCategory.BUSINESS_LOGIC,
-					subcategory: BCErrorSubcategory.EVALUATE_EXCEPTION,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-			if (code === "Application_CallbackNotAllowed") {
-				return {
-					category: BCErrorCategory.BUSINESS_LOGIC,
-					subcategory: BCErrorSubcategory.CALLBACK_NOT_ALLOWED,
-					retryStrategy: BCRetryStrategy.NO_RETRY,
-				};
-			}
-		}
-
-		// Authentication errors
-		if (code === "Unauthorized") {
-			return {
-				category: BCErrorCategory.AUTHENTICATION,
-				subcategory: BCErrorSubcategory.INVALID_TOKEN,
-				retryStrategy: BCRetryStrategy.REFRESH_TOKEN,
-			};
-		}
-
-		if (code.startsWith("Authentication_")) {
-			return {
-				category: BCErrorCategory.AUTHENTICATION,
-				subcategory: BCErrorSubcategory.INVALID_TOKEN,
-				retryStrategy: BCRetryStrategy.REFRESH_TOKEN,
-			};
-		}
-
-		// Authorization errors
-		if (code.startsWith("Authorization_")) {
-			return {
-				category: BCErrorCategory.AUTHORIZATION,
-				subcategory: BCErrorSubcategory.FIELD_VALIDATION,
-				retryStrategy: BCRetryStrategy.NO_RETRY,
-			};
-		}
-
-		// Default case
-		return {
-			category: BCErrorCategory.UNKNOWN,
-			subcategory: BCErrorSubcategory.MALFORMED_REQUEST,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		};
 	}
 
 	/**
@@ -503,7 +281,7 @@ export class BCError extends Error {
 	 */
 	static fromHttpResponse(response: {
 		status: number;
-		data: any;
+		data: unknown;
 		headers?: Record<string, string>;
 	}): BCError {
 		// Extract correlation ID from headers (case-insensitive)
@@ -516,7 +294,7 @@ export class BCError extends Error {
 		let errorResponse: ErrorResponse;
 		try {
 			errorResponse = validateErrorResponse(response.data);
-		} catch (validationError) {
+		} catch {
 			// BC returned unexpected format - use fromUnexpectedResponse
 			return BCError.fromUnexpectedResponse(
 				response.data,
@@ -532,7 +310,7 @@ export class BCError extends Error {
 	 * Factory method to create BCError from unexpected response format
 	 */
 	static fromUnexpectedResponse(
-		response: any,
+		data: unknown,
 		httpStatus: number,
 		correlationId?: string,
 	): BCError {
@@ -549,6 +327,7 @@ export class BCError extends Error {
 		bcError.category = BCErrorCategory.PARSING_ERROR;
 		bcError.subcategory = BCErrorSubcategory.UNEXPECTED_RESPONSE_FORMAT;
 		bcError.retryStrategy = BCRetryStrategy.NO_RETRY;
+		bcError.originalResponse = data;
 
 		return bcError;
 	}
