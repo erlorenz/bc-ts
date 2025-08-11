@@ -206,7 +206,7 @@ export class BCError extends Error {
 	/**
 	 * Creates a structured error object for logging/telemetry
 	 */
-	toLogObject(): object {
+	toLogObject() {
 		const baseLog = {
 			name: this.name,
 			message: this.message,
