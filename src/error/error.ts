@@ -1,5 +1,3 @@
-import type { ParseResult } from "./parse-schema.js";
-
 /**
  * Business Central OData Error Response Structure
  */
@@ -65,6 +63,8 @@ export type BCErrorCategory =
  * Business Central API Error Subcategories
  */
 export const BCErrorSubcategory = {
+	// Token error
+	TOKEN_ERROR: "TOKEN_ERROR",
 	// Client errors
 	MALFORMED_REQUEST: "MALFORMED_REQUEST",
 	INVALID_URL: "INVALID_URL",

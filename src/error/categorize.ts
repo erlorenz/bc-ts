@@ -5,7 +5,22 @@ import {
 } from "./error.js";
 
 // Configuration: All specific error code mappings
-const ERROR_CODE_MAPPINGS = new Map([
+type ErrorCodeGroup = {
+	category: BCErrorCategory;
+	subcategory: BCErrorSubcategory;
+	retryStrategy: BCRetryStrategy;
+};
+
+const ERROR_CODE_MAPPINGS = new Map<string, ErrorCodeGroup>([
+	// TokenRequest
+	[
+		"Authentication_TokenRequest",
+		{
+			category: BCErrorCategory.AUTHENTICATION,
+			subcategory: BCErrorSubcategory.TOKEN_ERROR,
+			retryStrategy: BCRetryStrategy.REFRESH_TOKEN,
+		},
+	],
 	// BadRequest errors
 	[
 		"BadRequest_ResourceNotFound",
@@ -210,7 +225,7 @@ const ERROR_CODE_MAPPINGS = new Map([
 ]);
 
 // Configuration: Default mappings for error code prefixes
-const PREFIX_DEFAULTS = new Map([
+const PREFIX_DEFAULTS = new Map<string, ErrorCodeGroup>([
 	[
 		"BadRequest_",
 		{
