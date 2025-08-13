@@ -1,13 +1,8 @@
 import packageJson from "../../package.json" with { type: "json" };
 import { BCError } from "../error/error.js";
-import { parseSchema } from "../error/parse-schema.js";
-import type { StandardSchemaV1 } from "../error/standard-schema.js";
-import {
-	isEmpty,
-	isValidGUID,
-	isValidURL,
-	notEmpty,
-} from "../validation/validation.js";
+import { parseSchema } from "../validation/parse-schema.js";
+import type { StandardSchemaV1 } from "../validation/standard-schema.js";
+import { isEmpty, isValidGUID, isValidURL } from "../validation/validation.js";
 
 /*=============================== Constants ===================================*/
 
@@ -28,7 +23,6 @@ const HEADER_USER_AGENT = "User-Agent";
 const HEADER_CORRELATION_ID = "request-id";
 // Header values
 const DATA_ACCESS_READONLY = "ReadOnly";
-const DATA_ACCESS_READWRITE = "ReadWrite";
 const CONTENTTYPE_JSON = "application/json";
 const ODATA_PAGE_SIZE = "odata.maxpagesize";
 
@@ -90,16 +84,10 @@ export class BCClient {
 
 	/** Gets the auth token. */
 	async #getToken() {
-		return await this.auth.getToken(this.scope).catch((err) => {
-			throw new BCError(
-				{
-					error: {
-						code: "Authentication_TokenRequest",
-						message: err.message,
-					},
-				},
-				401,
-			);
+		return await this.auth.getToken(this.scope).catch((err: unknown) => {
+			// Ensure error
+			const error = err instanceof Error ? err : new Error(JSON.stringify(err));
+			throw BCError.fromGetToken(error);
 		});
 	}
 
@@ -174,15 +162,24 @@ export class BCClient {
 		});
 
 		// Extract correlation ID
-		const correlationId = response.headers.get(HEADER_CORRELATION_ID) || "";
+		const correlationId = response.headers.get(HEADER_CORRELATION_ID);
 
 		const data = await response.json().catch((err) => {
 			// JSON parse error
-			throw BCError.fromJsonError(err, response.status, correlationId);
+			throw BCError.fromUnexpectedResponse(
+				data,
+				response.status,
+				correlationId || "",
+				err,
+			);
 		});
 
 		if (!response.ok) {
-			throw BCError.fromHttpResponse(response.status, data, correlationId);
+			throw BCError.fromHttpResponse(
+				response.status,
+				data,
+				correlationId || "",
+			);
 		}
 
 		return data;
@@ -198,7 +195,7 @@ export class BCClient {
 
 		const result = await parseSchema(schema, data);
 		if (result.issues) {
-			throw BCError.fromParseResult(result.issues);
+			throw BCError.fromSchemaValidation(result.issues);
 		}
 
 		return result.data;

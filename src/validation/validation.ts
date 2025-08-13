@@ -5,7 +5,7 @@ export function isValidGUID(str: string): boolean {
 	return GUID_REGEX.test(str);
 }
 
-export function notEmpty(
+export function isNotEmpty(
 	data:
 		| string
 		| Array<unknown>
@@ -36,7 +36,7 @@ export function isEmpty(
 		| Record<string, unknown>
 		| Map<unknown, unknown>,
 ) {
-	return !notEmpty(data);
+	return !isNotEmpty(data);
 }
 
 export function isValidURL(str?: string) {

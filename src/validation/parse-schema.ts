@@ -22,7 +22,7 @@ export type ParseResult<T> =
  */
 export async function parseSchema<T extends StandardSchemaV1>(
 	schema: T,
-	input: StandardSchemaV1.InferInput<T>,
+	input: unknown,
 ): Promise<ParseResult<StandardSchemaV1.InferOutput<T>>> {
 	// Call the validate function (matches standard approach)
 	let result = schema["~standard"].validate(input);
