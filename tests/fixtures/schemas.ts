@@ -29,15 +29,4 @@ export const SalesOrder = OriginalSalesOrder.transform((val) => {
 	};
 });
 
-type ExpandableKeys<T> = {
-	[K in keyof T]: T[K] extends (unknown[] | object) | undefined
-		? T[K] extends string | number | boolean | Date | null | undefined
-			? never
-			: K
-		: never;
-}[keyof T] &
-	string;
-
 type SalesOrder = z.infer<typeof SalesOrder>;
-
-type SalesOrderExpands = ExpandableKeys<z.input<typeof SalesOrder>>;

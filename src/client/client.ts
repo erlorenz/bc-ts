@@ -48,12 +48,6 @@ export type RequestOpts = {
 	serverPageSize?: number;
 };
 
-/** Builds URLSearchParams and a query string. */
-export interface ODataQuery {
-	toURLSearchParams(): URLSearchParams;
-	toString(): string;
-}
-
 /** Satisfies the \@azure/identity TokenCredential. Can also use MSAL-node.  */
 export interface AuthClient {
 	getToken(scope: string): Promise<string>;

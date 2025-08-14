@@ -1,39 +1,55 @@
-import z, { string } from "zod";
-import type { BCClient, ODataQuery, RequestOpts } from "../client/client.js";
+import type { BCClient, RequestOpts } from "../client/client.js";
 import { BCError } from "../error/error.js";
 import { parseSchema } from "../validation/parse-schema.js";
 import type { StandardSchemaV1 } from "../validation/standard-schema.js";
 
-type PaginationOptions = { maxResults?: number; serverPageLimit?: number };
+/*=============================== Types ===================================*/
 
-export class ApiPage<TOutput, I> {
-	#schema: StandardSchemaV1<I, TOutput>;
+export type PaginationOpts = {
+	maxResults?: number;
+	serverPageLimit?: number;
+};
+
+/** A query string of OData properties. */
+export type ODataQuery = string;
+
+/*=============================== Main class ===================================*/
+
+/** ApiPage represents an API Page for a collection.
+ * It uses the Standard Schema of an individual row result.
+ * It has full CRUD functionality.
+ */
+export class ApiPage<TOutput, TInput> {
+	#schema: StandardSchemaV1<TInput, TOutput>;
 	readonly endpoint: string;
 	readonly client: BCClient;
 
 	constructor(
 		client: BCClient,
 		endpoint: string,
-		schema: StandardSchemaV1<I, TOutput>,
+		schema: StandardSchemaV1<TInput, TOutput>,
 	) {
 		this.endpoint = endpoint;
 		this.#schema = schema;
 		this.client = client;
 	}
 
-	async getById(id: string): Promise<TOutput> {
+	async getById(id: string, query?: ODataQuery): Promise<TOutput> {
+		const opts = { params: new URLSearchParams(query) };
+
 		return await this.client.requestWithSchema(
-			`${this.endpoint}(${id})`,
+			this.#endpointWithId(id),
 			this.#schema,
+			opts,
 		);
 	}
 
 	async *list(
 		query: ODataQuery,
-		pOpts?: PaginationOptions,
+		pOpts?: PaginationOpts,
 	): AsyncIterableIterator<TOutput> {
 		let skipToken = "";
-		const itemCount = 0;
+		let itemCount = 0;
 
 		while (true) {
 			const opts: RequestOpts = {
@@ -41,8 +57,9 @@ export class ApiPage<TOutput, I> {
 			};
 
 			if (skipToken) {
-				opts.params = query.toURLSearchParams();
-				opts.params.append("skipToken", skipToken);
+				const params = new URLSearchParams(query);
+				params.append("$skipToken", skipToken);
+				opts.params = params;
 			}
 
 			const data = (await this.client.request(this.endpoint, {})) as {
@@ -75,39 +92,61 @@ export class ApiPage<TOutput, I> {
 				}
 
 				yield result.data;
-				itemIndex++;
+				itemCount++;
 
 				// Break out and return when limit reached
-				if (pOpts?.maxResults && itemIndex > pOpts.maxResults) {
+				if (pOpts?.maxResults && itemCount >= pOpts.maxResults) {
 					return;
 				}
 			}
 		}
 	}
 
-	async findByKey<K extends keyof I>(
-		key: K,
-		value: I[K],
-	): Promise<TOutput | null> {
-		return {} as TOutput;
-	}
-
-	async findOne(q: ODataQuery): Promise<TOutput | null> {
+	async findOne(query: ODataQuery): Promise<TOutput | null> {
+		for await (const item of this.list(query, { serverPageLimit: 1 })) {
+			return item;
+		}
 		return null;
 	}
+
+	async update(
+		id: string,
+		updateCommand: Partial<TInput>,
+		query?: ODataQuery,
+	): Promise<TOutput> {
+		const data = await this.client.requestWithSchema(
+			this.#endpointWithId(id),
+			this.#schema,
+			{
+				method: "PATCH",
+				payload: updateCommand,
+				params: new URLSearchParams(query),
+			},
+		);
+		return data;
+	}
+
+	async create(
+		createCommand: Partial<TInput>,
+		query: ODataQuery,
+	): Promise<TOutput> {
+		const data = await this.client.requestWithSchema(
+			this.endpoint,
+			this.#schema,
+			{
+				method: "POST",
+				payload: createCommand,
+				params: new URLSearchParams(query),
+			},
+		);
+		return data;
+	}
+
+	async delete(id: string) {
+		await this.client.request(this.#endpointWithId(id), { method: "DELETE" });
+	}
+
+	#endpointWithId(id: string) {
+		return `${this.endpoint}(${id})`;
+	}
 }
-
-const schema = z
-	.object({ id: z.string(), name: z.string(), createdAt: z.string() })
-	.transform((val) => ({
-		id: val.id,
-		createdAt: new Date(val.createdAt),
-		name: val.name,
-	}));
-
-const client = {} as BCClient;
-const page = new ApiPage(client, "something", schema);
-
-let item = await page.getById("dsfsd");
-
-item = await page.findByKey("createdAt");
