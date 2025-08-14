@@ -38,20 +38,20 @@ export type BCConfig = {
 };
 
 /** The options used for an individual request. */
-type RequestOpts = {
+export type RequestOpts = {
 	// group?: "sod" | "v2" | "manamed_connect" | "batch";
 	// group?: "v2" | "manamed_connect" | "batch";
 	method?: "GET" | "POST" | "PATCH" | "DELETE";
-	params?: QueryBuilder;
+	params?: URLSearchParams;
 	payload?: unknown;
 	timeout?: number;
 	serverPageSize?: number;
 };
 
 /** Builds URLSearchParams and a query string. */
-export interface QueryBuilder {
+export interface ODataQuery {
 	toURLSearchParams(): URLSearchParams;
-	toQuery(): string;
+	toString(): string;
 }
 
 /** Satisfies the \@azure/identity TokenCredential. Can also use MSAL-node.  */
@@ -93,7 +93,7 @@ export class BCClient {
 
 	/** Makes a request to the BC server.
 	 * Returns the raw response body or throws a BCError. */
-	async request(endpoint: string, opts: RequestOpts): Promise<unknown> {
+	async request(endpoint: string, opts?: RequestOpts): Promise<unknown> {
 		opts = opts || {};
 
 		const {
@@ -111,7 +111,7 @@ export class BCClient {
 		const url = new URL(`${this.apiURL}/${endpoint}`);
 
 		if (params) {
-			url.search = params.toQuery();
+			url.search = params.toString();
 		}
 
 		// Build headers.
@@ -189,7 +189,7 @@ export class BCClient {
 	async requestWithSchema<TSchema extends StandardSchemaV1>(
 		endpoint: string,
 		schema: TSchema,
-		opts: RequestOpts,
+		opts: RequestOpts = {},
 	) {
 		const data = await this.request(endpoint, opts);
 

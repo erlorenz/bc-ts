@@ -4,12 +4,12 @@ import {
 	categorizeError,
 } from "./categorize.js";
 
-type ServerError = {
+type ODataError = {
 	code: string;
 	message: string;
 };
 
-function parseErrorResponse(data: unknown): ServerError {
+function parseErrorResponse(data: unknown): ODataError {
 	const response = data as { error?: { code?: string; message?: string } };
 
 	if (!response.error?.code || !response.error?.message) {
@@ -32,7 +32,7 @@ export class BCError extends Error {
 	readonly timestamp: Date;
 	correlationId?: string;
 	validationDetails?: { message: string; path: string }[];
-	serverError?: ServerError;
+	serverError?: ODataError;
 	responseData?: unknown;
 	cause?: Error;
 
@@ -100,7 +100,7 @@ export class BCError extends Error {
 		data: unknown,
 		correlationId: string,
 	): BCError {
-		let serverError: ServerError;
+		let serverError: ODataError;
 		try {
 			serverError = parseErrorResponse(data);
 		} catch {
