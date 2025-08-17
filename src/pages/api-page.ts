@@ -1,3 +1,4 @@
+import { startsWith } from "zod";
 import type { BCClient, RequestOpts } from "../client/client.js";
 import { BCError } from "../error/error.js";
 import { parseSchema } from "../validation/parse-schema.js";
@@ -45,11 +46,13 @@ export class ApiPage<TOutput, TInput> {
 	}
 
 	async *list(
-		query: ODataQuery,
+		query?: ODataQuery,
 		pOpts?: PaginationOpts,
 	): AsyncIterableIterator<TOutput> {
 		let skipToken = "";
 		let itemCount = 0;
+
+		console.log("list query", query);
 
 		while (true) {
 			const opts: RequestOpts = {
@@ -58,11 +61,14 @@ export class ApiPage<TOutput, TInput> {
 
 			if (skipToken) {
 				const params = new URLSearchParams(query);
+				console.log({ params });
 				params.append("$skipToken", skipToken);
 				opts.params = params;
 			}
 
-			const data = (await this.client.request(this.endpoint, {})) as {
+			const data = (await this.client.request(this.endpoint, {
+				params: opts.params,
+			})) as {
 				value: unknown[];
 				"@odata.nextLink"?: string;
 			};

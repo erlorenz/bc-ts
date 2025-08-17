@@ -77,12 +77,14 @@ export class BCClient {
 	}
 
 	/** Gets the auth token. */
-	async #getToken() {
-		return await this.auth.getToken(this.scope).catch((err: unknown) => {
+	async getToken(): Promise<string> {
+		const token = this.auth.getToken(this.scope).catch((err: unknown) => {
 			// Ensure error
 			const error = err instanceof Error ? err : new Error(JSON.stringify(err));
 			throw BCError.fromGetToken(error);
 		});
+
+		return token;
 	}
 
 	/** Makes a request to the BC server.
@@ -111,7 +113,7 @@ export class BCClient {
 		// Build headers.
 		// Keeps cached token, only gets when expired.
 		// Throws BCError with category Authentication.
-		const token = await this.#getToken();
+		const token = await this.getToken();
 
 		const headers = new Headers();
 

@@ -10,13 +10,7 @@ export const OriginalSalesOrder = z.object({
 	customerNumber: z.string(),
 	number: z.string(),
 	orderDate: z.string(),
-	salesLines: z.array(SalesLine).optional(),
-	someOther: z
-		.object({
-			id: z.string(),
-			list: z.array(z.object({ id: z.string() })),
-		})
-		.optional(),
+	salesOrderLines: z.array(SalesLine).optional(),
 });
 
 export const SalesOrder = OriginalSalesOrder.transform((val) => {
@@ -25,8 +19,8 @@ export const SalesOrder = OriginalSalesOrder.transform((val) => {
 		customerNumber: val.customerNumber,
 		number: val.number,
 		orderDate: new Date(val.orderDate),
-		salesLines: val.salesLines,
+		lines: val.salesOrderLines,
 	};
 });
 
-type SalesOrder = z.infer<typeof SalesOrder>;
+export type SalesOrder = z.infer<typeof SalesOrder>;

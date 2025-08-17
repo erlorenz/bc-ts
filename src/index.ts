@@ -3,9 +3,8 @@ export {
 	BCClient,
 	type BCConfig,
 } from "./client/client.js";
-export {
+export type {
 	BCErrorCategory,
-	BCErrorSubcategory,
 	BCRetryStrategy,
 } from "./error/categorize.js";
 export { BCError } from "./error/error.js";
