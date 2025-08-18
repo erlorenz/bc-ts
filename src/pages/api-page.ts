@@ -97,8 +97,6 @@ export class ApiPage<
 				skipToken =
 					URL.parse(data["@odata.nextLink"])?.searchParams.get("skipToken") ||
 					"";
-
-				console.log({ skipToken });
 			}
 
 			if (!data.value.length) {

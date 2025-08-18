@@ -89,7 +89,7 @@ describe("API Page - v2.0/salesOrders - Queries", { timeout: 10_000 }, () => {
 		);
 	});
 
-	test.skip("finds one by orderNumber", async () => {
+	test("finds one by orderNumber", async () => {
 		const params = new URLSearchParams();
 		params.append("$filter", `number eq '${salesOrder.number}'`);
 		params.append("$expand", "salesOrderLines");
@@ -147,16 +147,28 @@ describe("API Page - v2.0/salesOrders - Commands", { timeout: 10_000 }, () => {
 			.toISOString()
 			.slice(0, 10);
 
-		order = await page.create({
-			// id: CREATE_ID,
-			customerNumber: "TEST01",
-			orderDate: TODAY,
-		});
+		const params = new URLSearchParams();
+		params.append("$expand", "salesOrderLines");
+
+		order = await page.create(
+			{
+				// id: CREATE_ID,
+				customerNumber: "TEST01",
+				orderDate: TODAY,
+			},
+			params.toString(),
+		);
 
 		assert.equal(order.orderDate, TODAY);
+		assert.ok(Array.isArray(order.lines), "expected order lines");
 
-		order = await page.update(order.id, { orderDate: YESTERDAY });
+		order = await page.update(
+			order.id,
+			{ orderDate: YESTERDAY },
+			params.toString(),
+		);
 		assert.equal(order.orderDate, YESTERDAY);
+		assert.ok(Array.isArray(order.lines), "expected order lines");
 	});
 
 	after(async () => {
