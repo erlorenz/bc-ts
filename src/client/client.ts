@@ -1,16 +1,32 @@
 import packageJson from "../../package.json" with { type: "json" };
 import { BCError } from "../error/error.js";
+import { parseSchema } from "../validation/parse-schema.js";
+import type { StandardSchemaV1 } from "../validation/standard-schema.js";
+import { isEmpty, isValidGUID, isValidURL } from "../validation/validation.js";
 
 /*=============================== Constants ===================================*/
+
+// Initialization
 export const BC_BASE_URL = "https://api.businesscentral.dynamics.com/v2.0";
 export const DEFAULT_TIMEOUT = 30_000;
 export const BC_DEFAULT_SCOPE =
 	"https://api.businesscentral.dynamics.com/.default";
 
-const GUID_REGEX =
-	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Headers and Request options
+const HEADER_DATA_ACCESS_INTENT = "Data-Access-Intent";
+const HEADER_AUTH = "Authorization";
+const HEADER_ACCEPTS = "Accepts";
+const HEADER_CONTENT_TYPE = "Content-Type";
+const HEADER_IF_MATCH = "If-Match";
+const HEADER_PREFER = "Prefer";
+const HEADER_USER_AGENT = "User-Agent";
+const HEADER_CORRELATION_ID = "request-id";
+// Header values
+const DATA_ACCESS_READONLY = "ReadOnly";
+const CONTENTTYPE_JSON = "application/json";
+const ODATA_PAGE_SIZE = "odata.maxpagesize";
 
-/*=============================== Types ===================================*/
+/*=============================== Types and Interfaces ===================================*/
 
 export type BCConfig = {
 	tenantId: string;
@@ -19,6 +35,17 @@ export type BCConfig = {
 	timeout?: number;
 	baseURL?: string;
 	userAgent?: string;
+};
+
+/** The options used for an individual request. */
+export type RequestOpts = {
+	// group?: "sod" | "v2" | "manamed_connect" | "batch";
+	// group?: "v2" | "manamed_connect" | "batch";
+	method?: "GET" | "POST" | "PATCH" | "DELETE";
+	params?: URLSearchParams;
+	payload?: unknown;
+	timeout?: number;
+	serverPageSize?: number;
 };
 
 /** Satisfies the \@azure/identity TokenCredential. Can also use MSAL-node.  */
@@ -33,7 +60,7 @@ export interface AuthClient {
 export class BCClient {
 	readonly auth;
 	readonly apiPath;
-	readonly baseURL;
+	readonly apiURL;
 	readonly scope = BC_DEFAULT_SCOPE;
 	readonly userAgent;
 	readonly timeout;
@@ -44,39 +71,146 @@ export class BCClient {
 
 		this.apiPath = apiPath;
 		this.auth = authClient;
-		this.baseURL = `${baseURL}/${tenantId}/${environment}/api/${apiPath}/companies(${companyId})`;
+		this.apiURL = `${baseURL}/${tenantId}/${environment}/api/${apiPath}/companies(${companyId})`;
 		this.timeout = timeout;
 		this.userAgent = userAgent;
 	}
 
-	async #getToken() {
-		return await this.auth.getToken(this.scope).catch((err) => {
-			throw new BCError(
-				{
-					error: {
-						code: "Authentication_TokenRequest",
-						message: err.message,
-					},
-				},
-				401,
+	/** Gets the auth token. */
+	async getToken(): Promise<string> {
+		const token = this.auth.getToken(this.scope).catch((err: unknown) => {
+			// Ensure error
+			const error = err instanceof Error ? err : new Error(JSON.stringify(err));
+			throw BCError.fromGetToken(error);
+		});
+
+		return token;
+	}
+
+	/** Makes a request to the BC server.
+	 * Returns the raw response body or throws a BCError. */
+	async request(endpoint: string, opts?: RequestOpts): Promise<unknown> {
+		opts = opts || {};
+
+		const {
+			payload,
+			method = "GET",
+			params,
+			timeout = 30_000,
+			serverPageSize,
+		} = opts;
+
+		// Strip out the leading slash.
+		endpoint = endpoint.startsWith("/") ? endpoint.replace("/", "") : endpoint;
+
+		// Build URL.
+		const url = new URL(`${this.apiURL}/${endpoint}`);
+
+		if (params) {
+			url.search = params.toString();
+		}
+
+		// Build headers.
+		// Keeps cached token, only gets when expired.
+		// Throws BCError with category Authentication.
+		const token = await this.getToken();
+
+		const headers = new Headers();
+
+		headers.set(HEADER_AUTH, `Bearer ${token}`);
+		headers.set(HEADER_ACCEPTS, CONTENTTYPE_JSON);
+		headers.set(HEADER_CONTENT_TYPE, CONTENTTYPE_JSON); // Doesn't hurt for GET so always set
+		headers.set(HEADER_USER_AGENT, this.userAgent);
+
+		// May speed things up for GET requests.
+		if (method === "GET") {
+			headers.set(HEADER_DATA_ACCESS_INTENT, DATA_ACCESS_READONLY);
+		}
+
+		// Patch requires this.
+		if (method === "PATCH") {
+			headers.set(HEADER_IF_MATCH, "*");
+		}
+
+		// For server driven paging.
+		if (serverPageSize) {
+			const pageSize = `${ODATA_PAGE_SIZE}=${serverPageSize.toString()}`;
+			headers.append(HEADER_PREFER, pageSize);
+		}
+
+		// Build request.
+		const init: RequestInit = {
+			method,
+			headers,
+			signal: AbortSignal.timeout(timeout),
+		};
+
+		if (payload) {
+			init.body = JSON.stringify(payload);
+		}
+
+		const request = new Request(url, init);
+
+		// Make response and handle errors.
+		const response = await fetch(request).catch((err) => {
+			// Network error
+			throw BCError.fromNetworkError(err);
+		});
+
+		// Extract correlation ID
+		const correlationId = response.headers.get(HEADER_CORRELATION_ID);
+
+		const data = await response.json().catch((err) => {
+			// JSON parse error
+			throw BCError.fromUnexpectedResponse(
+				data,
+				response.status,
+				correlationId || "",
+				err,
 			);
 		});
+
+		if (!response.ok) {
+			throw BCError.fromHttpResponse(
+				response.status,
+				data,
+				correlationId || "",
+			);
+		}
+
+		return data;
+	}
+
+	/** Internally calls request and then parses the data against the provided schema. */
+	async requestWithSchema<TSchema extends StandardSchemaV1>(
+		endpoint: string,
+		schema: TSchema,
+		opts: RequestOpts = {},
+	) {
+		const data = await this.request(endpoint, opts);
+
+		const result = await parseSchema(schema, data);
+		if (result.issues) {
+			throw BCError.fromSchemaValidation(result.issues);
+		}
+
+		return result.data;
 	}
 }
 
 function parseConfig(config: BCConfig): Required<BCConfig> {
-	if (config.baseURL && !URL.parse(config.baseURL)) {
+	if (config.baseURL && !isValidURL(config.baseURL)) {
 		throw Error("BCClient: a valid baseURL is required.");
 	}
-	if (!GUID_REGEX.test(config.companyId)) {
+	if (!isValidGUID(config.companyId)) {
 		throw Error("BCClient: a valid companyId is required.");
 	}
 
-	if (!GUID_REGEX.test(config.tenantId)) {
+	if (!isValidGUID(config.tenantId)) {
 		throw Error("BCClient: a valid tenantId is required.");
 	}
 
-	if (config.environment === "") {
+	if (isEmpty(config.environment)) {
 		throw Error("BCClient: a valid environment name is required.");
 	}
 

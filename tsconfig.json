@@ -13,7 +13,6 @@
 
 		// Output settings
 		"outDir": "./dist",
-		"rootDir": "./src",
 		"declaration": true,
 		"declarationMap": true,
 		"sourceMap": true,
@@ -26,7 +25,6 @@
 		"noImplicitReturns": true,
 		"noFallthroughCasesInSwitch": true,
 		"noUncheckedIndexedAccess": true,
-		"exactOptionalPropertyTypes": true,
 
 		// Module resolution
 		"esModuleInterop": true,
@@ -45,6 +43,6 @@
 		"verbatimModuleSyntax": true,
 		"erasableSyntaxOnly": true
 	},
-	"include": ["src/**/*"],
+	"include": ["src/**/*", "tests/**/*"],
 	"exclude": ["node_modules", "dist"]
 }

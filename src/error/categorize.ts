@@ -1,304 +1,117 @@
-import {
-	BCErrorCategory,
-	BCErrorSubcategory,
-	BCRetryStrategy,
-} from "./error.js";
+export type BCErrorCategory = (typeof errorCategories)[number];
 
-// Configuration: All specific error code mappings
-type ErrorCodeGroup = {
-	category: BCErrorCategory;
-	subcategory: BCErrorSubcategory;
-	retryStrategy: BCRetryStrategy;
-};
+export type BCRetryStrategy = (typeof retryStrategies)[number];
 
-const ERROR_CODE_MAPPINGS = new Map<string, ErrorCodeGroup>([
-	// TokenRequest
-	[
-		"Authentication_TokenRequest",
-		{
-			category: BCErrorCategory.AUTHENTICATION,
-			subcategory: BCErrorSubcategory.TOKEN_ERROR,
-			retryStrategy: BCRetryStrategy.REFRESH_TOKEN,
-		},
-	],
-	// BadRequest errors
-	[
-		"BadRequest_ResourceNotFound",
-		{
-			category: BCErrorCategory.NOT_FOUND,
-			subcategory: BCErrorSubcategory.RESOURCE_NOT_FOUND,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"BadRequest_NotFound",
-		{
-			category: BCErrorCategory.CLIENT_ERROR,
-			subcategory: BCErrorSubcategory.INVALID_URL,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"BadRequest_InvalidRequestUrl",
-		{
-			category: BCErrorCategory.CLIENT_ERROR,
-			subcategory: BCErrorSubcategory.INVALID_URL,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"BadRequest_InvalidToken",
-		{
-			category: BCErrorCategory.CLIENT_ERROR,
-			subcategory: BCErrorSubcategory.INVALID_TOKEN,
-			retryStrategy: BCRetryStrategy.REFRESH_TOKEN,
-		},
-	],
-	[
-		"BadRequest_InvalidOperation",
-		{
-			category: BCErrorCategory.VALIDATION,
-			subcategory: BCErrorSubcategory.FIELD_VALIDATION,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"BadRequest_RequiredParamNotProvided",
-		{
-			category: BCErrorCategory.VALIDATION,
-			subcategory: BCErrorSubcategory.MISSING_REQUIRED_FIELD,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"BadRequest_MethodNotAllowed",
-		{
-			category: BCErrorCategory.CLIENT_ERROR,
-			subcategory: BCErrorSubcategory.METHOD_NOT_ALLOWED,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"BadRequest_MethodNotImplemented",
-		{
-			category: BCErrorCategory.CLIENT_ERROR,
-			subcategory: BCErrorSubcategory.METHOD_NOT_IMPLEMENTED,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
+const errorCategories = [
+	"AUTHENTICATION", // Invalid/expired tokens, token refresh failures
+	"AUTHORIZATION", // Cannot access tables/resources
+	"BAD_REQUEST", // Consumer errors: wrong URLs, invalid fields, malformed requests
+	"NOT_FOUND", // Records/resources don't exist
+	"CONFLICT", // Duplicate keys, entity changed conflicts
+	"SCHEMA_MISMATCH", // Response doesn't match expected schema
+	"NETWORK_ERROR", // Connection issues, timeouts, DNS failures
+	"UNEXPECTED_RESPONSE", // BC returned non-standard format
+	"SERVER_ERROR", // BC internal errors, database issues
+	"UNKNOWN", // Fallback for unrecognized errors
+] as const;
 
-	// Request errors
-	[
-		"Request_EntityChanged",
-		{
-			category: BCErrorCategory.CONFLICT,
-			subcategory: BCErrorSubcategory.ENTITY_CHANGED,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
+const retryStrategies = [
+	"NO_RETRY",
+	"EXPONENTIAL_BACKOFF",
+	"REFRESH_TOKEN",
+] as const;
 
-	// Internal errors
-	[
-		"Internal_EntityWithSameKeyExists",
-		{
-			category: BCErrorCategory.CONFLICT,
-			subcategory: BCErrorSubcategory.DUPLICATE_KEY,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"Internal_RecordNotFound",
-		{
-			category: BCErrorCategory.NOT_FOUND,
-			subcategory: BCErrorSubcategory.RECORD_NOT_FOUND,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"Internal_CompanyNotFound",
-		{
-			category: BCErrorCategory.NOT_FOUND,
-			subcategory: BCErrorSubcategory.COMPANY_NOT_FOUND,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"Internal_DataNotFoundFilter",
-		{
-			category: BCErrorCategory.NOT_FOUND,
-			subcategory: BCErrorSubcategory.RECORD_NOT_FOUND,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"Internal_InvalidTableRelation",
-		{
-			category: BCErrorCategory.VALIDATION,
-			subcategory: BCErrorSubcategory.INVALID_TABLE_RELATION,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"Internal_ServerError",
-		{
-			category: BCErrorCategory.SERVER_ERROR,
-			subcategory: BCErrorSubcategory.DATABASE_CONNECTION,
-			retryStrategy: BCRetryStrategy.EXPONENTIAL_BACKOFF,
-		},
-	],
-	[
-		"Internal_TenantUnavailable",
-		{
-			category: BCErrorCategory.SERVER_ERROR,
-			subcategory: BCErrorSubcategory.TENANT_UNAVAILABLE,
-			retryStrategy: BCRetryStrategy.EXPONENTIAL_BACKOFF,
-		},
-	],
+const errorCodeMappings = new Map<string, BCErrorCategory>([
+	// Authentication errors
+	["BadRequest_InvalidToken", "AUTHENTICATION"],
+	["Unauthorized", "AUTHENTICATION"],
+	["Authentication_TokenError", "AUTHENTICATION"],
 
-	// Application errors
-	[
-		"Application_DialogException",
-		{
-			category: BCErrorCategory.BUSINESS_LOGIC,
-			subcategory: BCErrorSubcategory.DIALOG_EXCEPTION,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"Application_FieldValidationException",
-		{
-			category: BCErrorCategory.VALIDATION,
-			subcategory: BCErrorSubcategory.FIELD_VALIDATION,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"Application_StringExceededLength",
-		{
-			category: BCErrorCategory.VALIDATION,
-			subcategory: BCErrorSubcategory.STRING_LENGTH_EXCEEDED,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"Application_InvalidGUID",
-		{
-			category: BCErrorCategory.VALIDATION,
-			subcategory: BCErrorSubcategory.INVALID_GUID,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"Application_FilterErrorException",
-		{
-			category: BCErrorCategory.VALIDATION,
-			subcategory: BCErrorSubcategory.FILTER_ERROR,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"Application_EvaluateException",
-		{
-			category: BCErrorCategory.BUSINESS_LOGIC,
-			subcategory: BCErrorSubcategory.EVALUATE_EXCEPTION,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"Application_CallbackNotAllowed",
-		{
-			category: BCErrorCategory.BUSINESS_LOGIC,
-			subcategory: BCErrorSubcategory.CALLBACK_NOT_ALLOWED,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
+	// Authorization errors (forbidden access to resources)
+	["Forbidden", "AUTHORIZATION"],
+	["Authorization_InsufficientPermissions", "AUTHORIZATION"],
 
-	// Special cases
-	[
-		"Unauthorized",
-		{
-			category: BCErrorCategory.AUTHENTICATION,
-			subcategory: BCErrorSubcategory.INVALID_TOKEN,
-			retryStrategy: BCRetryStrategy.REFRESH_TOKEN,
-		},
-	],
+	// Bad Request - Consumer errors
+	["BadRequest_InvalidRequestUrl", "BAD_REQUEST"],
+	["BadRequest_NotFound", "BAD_REQUEST"],
+	["BadRequest_MethodNotAllowed", "BAD_REQUEST"],
+	["BadRequest_MethodNotImplemented", "BAD_REQUEST"],
+	["BadRequest_RequiredParamNotProvided", "BAD_REQUEST"],
+	["BadRequest_InvalidOperation", "BAD_REQUEST"],
+	["SkipTokenIsNoLongerValid", "BAD_REQUEST"],
+	["Application_FieldValidationException", "BAD_REQUEST"],
+	["Application_StringExceededLength", "BAD_REQUEST"],
+	["Application_InvalidGUID", "BAD_REQUEST"],
+	["Application_FilterErrorException", "BAD_REQUEST"],
+
+	// Not Found
+	["BadRequest_ResourceNotFound", "NOT_FOUND"],
+	["Internal_RecordNotFound", "NOT_FOUND"],
+	["Internal_CompanyNotFound", "NOT_FOUND"],
+	["Internal_DataNotFoundFilter", "NOT_FOUND"],
+
+	// Conflicts
+	["Request_EntityChanged", "CONFLICT"],
+	["Internal_EntityWithSameKeyExists", "CONFLICT"],
+
+	// Server Errors (retryable)
+	["Internal_ServerError", "SERVER_ERROR"],
+	["Internal_TenantUnavailable", "SERVER_ERROR"],
+	["Internal_DatabaseConnection", "SERVER_ERROR"],
+
+	// Business Logic errors (treat as bad request since they're often due to invalid data/operations)
+	["Application_DialogException", "BAD_REQUEST"],
+	["Application_EvaluateException", "BAD_REQUEST"],
+	["Application_CallbackNotAllowed", "BAD_REQUEST"],
 ]);
 
-// Configuration: Default mappings for error code prefixes
-const PREFIX_DEFAULTS = new Map<string, ErrorCodeGroup>([
-	[
-		"BadRequest_",
-		{
-			category: BCErrorCategory.CLIENT_ERROR,
-			subcategory: BCErrorSubcategory.MALFORMED_REQUEST,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"Request_",
-		{
-			category: BCErrorCategory.CONFLICT,
-			subcategory: BCErrorSubcategory.ENTITY_CHANGED,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"Internal_",
-		{
-			category: BCErrorCategory.SERVER_ERROR,
-			subcategory: BCErrorSubcategory.DATABASE_CONNECTION,
-			retryStrategy: BCRetryStrategy.EXPONENTIAL_BACKOFF,
-		},
-	],
-	[
-		"Application_",
-		{
-			category: BCErrorCategory.BUSINESS_LOGIC,
-			subcategory: BCErrorSubcategory.DIALOG_EXCEPTION,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
-	[
-		"Authentication_",
-		{
-			category: BCErrorCategory.AUTHENTICATION,
-			subcategory: BCErrorSubcategory.INVALID_TOKEN,
-			retryStrategy: BCRetryStrategy.REFRESH_TOKEN,
-		},
-	],
-	[
-		"Authorization_",
-		{
-			category: BCErrorCategory.AUTHORIZATION,
-			subcategory: BCErrorSubcategory.FIELD_VALIDATION,
-			retryStrategy: BCRetryStrategy.NO_RETRY,
-		},
-	],
+const prefixDefaults = new Map<string, BCErrorCategory>([
+	["BadRequest_", "BAD_REQUEST"],
+	["Request_", "CONFLICT"],
+	["Internal_", "SERVER_ERROR"],
+	["Application_", "BAD_REQUEST"],
+	["Authentication_", "AUTHENTICATION"],
+	["Authorization_", "AUTHORIZATION"],
 ]);
 
-/** Picks from a map of known errors, otherwise chooses a default. */
+const categoryToRetryStrategy = new Map<BCErrorCategory, BCRetryStrategy>([
+	["AUTHENTICATION", "REFRESH_TOKEN"],
+	["AUTHORIZATION", "NO_RETRY"],
+	["BAD_REQUEST", "NO_RETRY"],
+	["NOT_FOUND", "NO_RETRY"],
+	["CONFLICT", "NO_RETRY"],
+	["SCHEMA_MISMATCH", "NO_RETRY"],
+	["NETWORK_ERROR", "EXPONENTIAL_BACKOFF"],
+	["UNEXPECTED_RESPONSE", "NO_RETRY"],
+	["SERVER_ERROR", "EXPONENTIAL_BACKOFF"],
+	["UNKNOWN", "NO_RETRY"],
+]);
+
+/** Categorizes BC error codes into simplified categories for retry decision making */
 export function categorizeError(code: string): {
 	category: BCErrorCategory;
-	subcategory: BCErrorSubcategory;
 	retryStrategy: BCRetryStrategy;
 } {
 	// Check for exact match first
-	const exactMatch = ERROR_CODE_MAPPINGS.get(code);
-	if (exactMatch) {
-		return exactMatch;
-	}
+	let category = errorCodeMappings.get(code);
 
-	// Check for prefix match
-	for (const [prefix, defaultMapping] of PREFIX_DEFAULTS) {
-		if (code.startsWith(prefix)) {
-			return defaultMapping;
+	if (!category) {
+		// Check for prefix match
+		for (const [prefix, defaultCategory] of prefixDefaults) {
+			if (code.startsWith(prefix)) {
+				category = defaultCategory;
+				break;
+			}
 		}
 	}
 
 	// Global fallback
-	return {
-		category: BCErrorCategory.UNKNOWN,
-		subcategory: BCErrorSubcategory.MALFORMED_REQUEST,
-		retryStrategy: BCRetryStrategy.NO_RETRY,
-	};
+	if (!category) {
+		category = "UNKNOWN";
+	}
+
+	// Get retry strategy from category
+	const retryStrategy = categoryToRetryStrategy.get(category) ?? "NO_RETRY";
+
+	return { category, retryStrategy };
 }

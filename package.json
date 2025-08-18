@@ -1,6 +1,6 @@
 {
 	"name": "@eldev/business-central-api",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "A Dynamics 365 Business Central client for TypeScript",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -21,7 +21,8 @@
 		"build": "tsc --project tsconfig.build.json",
 		"test": "node --test --import tsx ./src/**/*.test.ts",
 		"test:watch": "node --test --watch --import tsx ./src/**/*.test.ts",
-		"test:e2e": "node --test --import tsx --env-file=.env ./tests/**/*.test.ts",
+		"test:int": "node --test --import tsx --env-file=.env ./tests/**/*.test.ts",
+		"test:int:debug": "node --inspect-brk --test --import tsx/esm --env-file=.env ./tests/**/*.test.ts",
 		"clean": "rm -rf dist",
 		"prepublishOnly": "npm run lint && npm run test && npm run clean && npm run build",
 		"lint": "biome check src",
@@ -45,11 +46,11 @@
 		"node": ">=24.0.0"
 	},
 	"devDependencies": {
+		"@azure/identity": "^4.11.1",
 		"@biomejs/biome": "^2.1.4",
 		"@types/node": "^24.2.1",
 		"tsx": "^4.20.3",
 		"typescript": "^5.9.2",
-		"@azure/identity": "^4.11.1"
-	},
-	"dependencies": {}
+		"zod": "^4.0.17"
+	}
 }

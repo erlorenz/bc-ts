@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { suite, test } from "node:test";
+import { suite as describe, test } from "node:test";
 import {
 	BC_BASE_URL,
 	BCClient,
@@ -24,10 +24,10 @@ const validConfig = {
 
 /*=============================== Suites ===================================*/
 
-suite("Initialize BCClient", { concurrency: true }, () => {
+describe("Initialize BCClient", { concurrency: true }, () => {
 	test("With valid config", () => {
 		const client = new BCClient(validConfig, "apiPath", fakeAuth);
-		assert.ok(client.baseURL.startsWith(validConfig.baseURL));
+		assert.ok(client.apiURL.startsWith(validConfig.baseURL));
 	});
 
 	test("With invalid config", () => {
@@ -55,7 +55,7 @@ suite("Initialize BCClient", { concurrency: true }, () => {
 		delete minimalConfig.userAgent;
 
 		const client = new BCClient(minimalConfig, "apiPath", fakeAuth);
-		assert.ok(client.baseURL.startsWith(BC_BASE_URL));
+		assert.ok(client.apiURL.startsWith(BC_BASE_URL));
 		assert.equal(client.timeout, DEFAULT_TIMEOUT);
 		assert.ok(client.userAgent && client.userAgent !== "");
 	});
