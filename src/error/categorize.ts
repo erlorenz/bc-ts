@@ -32,6 +32,7 @@ const errorCodeMappings = new Map<string, BCErrorCategory>([
 	["Authorization_InsufficientPermissions", "AUTHORIZATION"],
 
 	// Bad Request - Consumer errors
+	["BadRequest", "BAD_REQUEST"], // Exact code
 	["BadRequest_InvalidRequestUrl", "BAD_REQUEST"],
 	["BadRequest_NotFound", "BAD_REQUEST"],
 	["BadRequest_MethodNotAllowed", "BAD_REQUEST"],
@@ -104,7 +105,6 @@ export function categorizeError(code: string): {
 			}
 		}
 	}
-
 	// Global fallback
 	if (!category) {
 		category = "UNKNOWN";

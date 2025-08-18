@@ -1,5 +1,7 @@
 import packageJson from "../../package.json" with { type: "json" };
 import { BCError } from "../error/error.js";
+import { ApiPage } from "../pages/api-page.js";
+import { ApiQuery } from "../pages/api-query.js";
 import { parseSchema } from "../validation/parse-schema.js";
 import type { StandardSchemaV1 } from "../validation/standard-schema.js";
 import { isEmpty, isValidGUID, isValidURL } from "../validation/validation.js";
@@ -157,13 +159,18 @@ export class BCClient {
 			throw BCError.fromNetworkError(err);
 		});
 
+		// Handle no content
+		if (response.status === 204) {
+			return null;
+		}
+
 		// Extract correlation ID
 		const correlationId = response.headers.get(HEADER_CORRELATION_ID);
 
 		const data = await response.json().catch((err) => {
 			// JSON parse error
 			throw BCError.fromUnexpectedResponse(
-				data,
+				null,
 				response.status,
 				correlationId || "",
 				err,
@@ -195,6 +202,22 @@ export class BCClient {
 		}
 
 		return result.data;
+	}
+
+	/** Returns a typed ApiPage for an endpoint and Standard Schema of a record.
+	 * Chain the method withCommands to add types the create, update, and action methods.
+	 */
+	for<T>(endpoint: string, schema: StandardSchemaV1<unknown, T>): ApiPage<T> {
+		return new ApiPage(this, endpoint, schema);
+	}
+
+	/** Returns a typed ApiQuery for an endpoint and Standard Schema of a record.
+	 */
+	forQuery<T>(
+		endpoint: string,
+		schema: StandardSchemaV1<unknown, T>,
+	): ApiQuery<T> {
+		return new ApiQuery(this, endpoint, schema);
 	}
 }
 

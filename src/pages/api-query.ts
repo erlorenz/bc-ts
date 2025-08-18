@@ -2,10 +2,15 @@ import type { BCClient } from "../client/client.js";
 import type { StandardSchemaV1 } from "../validation/standard-schema.js";
 import { ApiPage, type ODataQuery, type PaginationOpts } from "./api-page.js";
 
-export class APIQuery<T> {
+/** ApiQuery wraps an ApiPage and only exposes the list method. */
+export class ApiQuery<T> {
 	#apiPage;
 
-	constructor(client: BCClient, endpoint: string, schema: StandardSchemaV1<T>) {
+	constructor(
+		client: BCClient,
+		endpoint: string,
+		schema: StandardSchemaV1<unknown, T>,
+	) {
 		this.#apiPage = new ApiPage(client, endpoint, schema);
 	}
 

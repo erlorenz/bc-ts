@@ -75,6 +75,8 @@ describe("AuthClient", { concurrency: true }, () => {
 		assert.equal(res.value.length, 1);
 		assert(first);
 
-		assert.ok(first.orderDate > new Date("2025-01-01"));
+		assert.ok(
+			new Date(first.orderDate as unknown as string) > new Date("2025-01-01"),
+		);
 	});
 });

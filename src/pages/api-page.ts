@@ -1,4 +1,4 @@
-import { startsWith } from "zod";
+import type { UUID } from "node:crypto";
 import type { BCClient, RequestOpts } from "../client/client.js";
 import { BCError } from "../error/error.js";
 import { parseSchema } from "../validation/parse-schema.js";
@@ -20,22 +20,35 @@ export type ODataQuery = string;
  * It uses the Standard Schema of an individual row result.
  * It has full CRUD functionality.
  */
-export class ApiPage<TOutput, TInput> {
-	#schema: StandardSchemaV1<TInput, TOutput>;
+export class ApiPage<
+	T,
+	TCreate = unknown,
+	TUpdate = unknown,
+	TActions extends string = string,
+> {
+	#schema: StandardSchemaV1<unknown, T>;
 	readonly endpoint: string;
 	readonly client: BCClient;
 
 	constructor(
 		client: BCClient,
 		endpoint: string,
-		schema: StandardSchemaV1<TInput, TOutput>,
+		schema: StandardSchemaV1<unknown, T>,
 	) {
 		this.endpoint = endpoint;
 		this.#schema = schema;
 		this.client = client;
 	}
 
-	async getById(id: string, query?: ODataQuery): Promise<TOutput> {
+	withCommands<
+		TNewCreate,
+		TNewUpdate,
+		TNewActions extends string = string,
+	>(): ApiPage<T, TNewCreate, TNewUpdate, TNewActions> {
+		return this as unknown as ApiPage<T, TNewCreate, TNewUpdate, TNewActions>;
+	}
+
+	async getById(id: string, query?: ODataQuery): Promise<T> {
 		const opts = { params: new URLSearchParams(query) };
 
 		return await this.client.requestWithSchema(
@@ -48,28 +61,23 @@ export class ApiPage<TOutput, TInput> {
 	async *list(
 		query?: ODataQuery,
 		pOpts?: PaginationOpts,
-	): AsyncIterableIterator<TOutput> {
+	): AsyncIterableIterator<T> {
+		let more = true;
 		let skipToken = "";
 		let itemCount = 0;
 
-		console.log("list query", query);
-
-		while (true) {
+		while (more) {
 			const opts: RequestOpts = {
 				serverPageSize: pOpts?.serverPageLimit,
 			};
+			opts.params = new URLSearchParams(query);
 
 			if (skipToken) {
-				const params = new URLSearchParams(query);
-				console.log({ params });
-				params.append("$skipToken", skipToken);
-				opts.params = params;
+				opts.params.append("$skipToken", skipToken);
 			}
 
-			const data = (await this.client.request(this.endpoint, {
-				params: opts.params,
-			})) as {
-				value: unknown[];
+			const data = (await this.client.request(this.endpoint, opts)) as {
+				value?: unknown[];
 				"@odata.nextLink"?: string;
 			};
 
@@ -89,6 +97,13 @@ export class ApiPage<TOutput, TInput> {
 				skipToken =
 					URL.parse(data["@odata.nextLink"])?.searchParams.get("skipToken") ||
 					"";
+
+				console.log({ skipToken });
+			}
+
+			if (!data.value.length) {
+				more = false;
+				break;
 			}
 
 			for (const item of data.value) {
@@ -102,24 +117,27 @@ export class ApiPage<TOutput, TInput> {
 
 				// Break out and return when limit reached
 				if (pOpts?.maxResults && itemCount >= pOpts.maxResults) {
-					return;
+					more = false;
+					break;
 				}
 			}
 		}
 	}
 
-	async findOne(query: ODataQuery): Promise<TOutput | null> {
+	async findOne(query: ODataQuery): Promise<T | null> {
+		let found = null;
 		for await (const item of this.list(query, { serverPageLimit: 1 })) {
-			return item;
+			found = item;
+			break;
 		}
-		return null;
+		return found;
 	}
 
 	async update(
-		id: string,
-		updateCommand: Partial<TInput>,
+		id: string | UUID,
+		updateCommand: TUpdate,
 		query?: ODataQuery,
-	): Promise<TOutput> {
+	): Promise<T> {
 		const data = await this.client.requestWithSchema(
 			this.#endpointWithId(id),
 			this.#schema,
@@ -132,10 +150,7 @@ export class ApiPage<TOutput, TInput> {
 		return data;
 	}
 
-	async create(
-		createCommand: Partial<TInput>,
-		query: ODataQuery,
-	): Promise<TOutput> {
+	async create(createCommand: TCreate, query?: ODataQuery): Promise<T> {
 		const data = await this.client.requestWithSchema(
 			this.endpoint,
 			this.#schema,
@@ -148,8 +163,17 @@ export class ApiPage<TOutput, TInput> {
 		return data;
 	}
 
-	async delete(id: string) {
+	async delete(id: string): Promise<void> {
 		await this.client.request(this.#endpointWithId(id), { method: "DELETE" });
+	}
+
+	/** Executes a bound action. Use the withCommands method to add types to give options. */
+	async action(id: string, action: TActions): Promise<void> {
+		const actionEndpoint = `${this.#endpointWithId(id)}/Microsoft.NAV.${action}`;
+
+		await this.client.request(actionEndpoint, {
+			method: "POST",
+		});
 	}
 
 	#endpointWithId(id: string) {
