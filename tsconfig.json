@@ -33,7 +33,6 @@
 		"allowImportingTsExtensions": false,
 
 		// Emit settings
-		"removeComments": true,
 		"skipLibCheck": true,
 		"isolatedModules": true,
 
